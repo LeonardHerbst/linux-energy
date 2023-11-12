@@ -1076,6 +1076,11 @@ config CGROUP_FREEZER
 
 	  If you're using cgroup2, say N.
 
+config CGROUP_ENERGY
+        bool "Energy controller"
+        help
+          Experimental Energy cgroup.
+
 config CGROUP_HUGETLB
 	bool "HugeTLB controller"
 	depends on HUGETLB_PAGE

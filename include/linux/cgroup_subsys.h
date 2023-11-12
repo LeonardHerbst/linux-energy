@@ -8,6 +8,9 @@
 /*
  * This file *must* be included with SUBSYS() defined.
  */
+#if IS_ENABLED(CONFIG_CGROUP_ENERGY)
+SUBSYS(energy)
+#endif
 
 #if IS_ENABLED(CONFIG_CPUSETS)
 SUBSYS(cpuset)

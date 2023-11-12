@@ -365,6 +365,10 @@ struct cfs_bandwidth {
 #endif
 };
 
+#ifdef CONFIG_CGROUP_ENERGY
+        extern struct energy_cgroup_callbacks energy_cgroup_callbacks; 
+#endif
+
 /* Task group related information */
 struct task_group {
 	struct cgroup_subsys_state css;

@@ -474,6 +474,14 @@ static void energy_cgroup_task_scheduled(struct task_struct *next, struct task_s
         }
 
         tmp = (prev->tgid == 0 || prev->pid == 0) ? NULL : css_energy(task_css(prev, energy_cgrp_id));
+        if (!tmp) {
+                spin_lock(&running_css->running_css_lock);
+                running_css->start = end;
+                running_css->energy = css_energy(task_css(next, energy_cgrp_id));
+                spin_unlock(&running_css->running_css_lock);
+                return;
+        }
+
         err = construct_energy_history_entry(&new_entry, tmp, 0, end);
 
         if (!spin_trylock(&running_css->running_css_lock)) {
@@ -550,6 +558,13 @@ static void accounting_tic(struct timer_list *) {
                         continue;
                 }
 
+                if (!cpu_local_running_css->energy) {
+                        /* Idle/swapper/schedule currently running */
+                        cpu_local_running_css->start = end;
+                        spin_unlock(&cpu_local_running_css->running_css_lock);
+                        continue;
+                }
+
                 err = construct_energy_history_entry(&new_entry, cpu_local_running_css->energy, cpu_local_running_css->start, end);
                 cpu_local_running_css->start = end;
 
@@ -584,7 +599,9 @@ static void accounting_tic(struct timer_list *) {
         last_measurement = current_measurement;
 
 
+        /*  fist might be NULL if only the swapper ran but we want to schedule accounting anyways in case there are deletion candidates */
         accounting_period->first = llist_del_all(&energy_history);
+
         accounting_period->time_period = (u64)atomic64_read(&accounting_period_duration);
 
         llist_add(&accounting_period->siblings, &deferred_accounting.accounting_period_list);
@@ -621,6 +638,11 @@ static void accounting(struct work_struct *work)
         period_list_first       = llist_del_first(&accounting_work->accounting_period_list);
         current_period          = llist_entry(period_list_first, struct accounting_period, siblings);
 
+        if (!current_period->first) {
+                /* only the swapper ran this period*/
+                add_to_energy_counters(&accounting_work->idle_task, &current_period->total_energy_consumption);
+        }
+
         llist_for_each_entry_safe(pos, tmp, current_period->first, siblings) {
 
                 if (unlikely(accounting_work->abort))
@@ -630,10 +652,7 @@ static void accounting(struct work_struct *work)
                 energy_counters_multiply_scalar(&energy_accumulator, ktime_sub(pos->end, pos->start));
                 energy_counters_div_round_up(&energy_accumulator, current_period->time_period);
 
-                if (pos->energy == NULL) 
-                        add_to_energy_counters(&accounting_work->idle_task, &energy_accumulator);
-                else
-                        add_to_energy_counters(&pos->energy->energy_consumption, &energy_accumulator);
+                add_to_energy_counters(&pos->energy->energy_consumption, &energy_accumulator);
 
                 kfree(pos);
         }
